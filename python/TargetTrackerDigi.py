@@ -325,7 +325,6 @@ n_tt_stations = ship_geo.NuTauTT.n # 19
 
 #---- 1. EXTRACT DATA ----------------
 # TT
-filelog = open('TestLOG.csv', 'w')
 for index, event in enumerate(tree):
 	for hit in event.TTPoint:
 		way, tt_num_plane, matnum, n_mats, matlen = get_mat_info(hit.GetDetectorID())
@@ -355,12 +354,6 @@ for index, event in enumerate(tree):
 		if wmp_of_cluster is False:
 			continue
 
-		filelog.write('DetID={}; X={}; Y={}; lpos={}; dist={}; rlpos={}; rgpos={};'
-			'ly={}; width={}; TTnum={}; wmp={};\n'.format(
-			hit.GetDetectorID(), hit.GetX(), hit.GetY(), localpos, distance, 
-			recovery_localpos, recovery_globalpos, ly_amplitude, cluster_width, 
-			tt_num_plane, wmp_of_cluster))
-
 		tt_points.append([
 			hit.GetTime(), # 0; ns
 			tt_num_plane, # 1
@@ -369,7 +362,7 @@ for index, event in enumerate(tree):
 			edep_to_ly(hit.GetEnergyLoss()*1.0e03), #ly signal, # 4
 			cluster_width, # 5
 			recovery_globalpos, # 6
-			way_bin, # 7
+			way_bin, # 7 # 0-vert (X), 1-hor (Y)
 			delta, # 8
 		])
 
@@ -422,12 +415,6 @@ for index, event in enumerate(tree):
 		if wmp_of_cluster is False:
 			continue
 
-		filelog.write('DetID={}; X={}; Y={}; lpos={}; dist={}; rlpos={}; rgpos={};'
-			'ly={}; width={}; TTnum={}; wmp={};\n'.format(
-			hit.GetDetectorID(), hit.GetX(), hit.GetY(), localpos, distance, 
-			recovery_localpos, recovery_globalpos, ly_amplitude, cluster_width, 
-			tt_num_plane, wmp_of_cluster))
-
 		hpt_points.append([
 			hit.GetTime(), # 0; ns
 			hpt_num_plane + n_tt_stations, # 1
@@ -466,31 +453,7 @@ tt_points = np.vstack((tt_points, hpt_points))
 
 
 # ---- 2. WRITE THE DATA --------------------------
-delta_test = []
-n_failed = 0
-ftest = open("TToutTESTING.txt","w")
-for index, event in enumerate(tt_points):
-	ftest.write("PdgCode={:2.0f}; ".format(tt_raw[index,2]))
-	ftest.write("TrackID={:2.0f}; ".format(tt_raw[index,0]))
-	ftest.write("EventID={:2.0f}; ".format(tt_raw[index,3]))
-	ftest.write("Z={:7.4f}; ".format(tt_raw[index,7]))
-	ftest.write("TTnum={:2.0f}; ".format(tt_points[index,1]))
-	ftest.write("DetID={:3.0f}; ".format(tt_points[index,2]))
-	ftest.write("ChanPos={:8.4f}; ".format(tt_points[index,3]))
-	ftest.write("Amp={:7.4f}; ".format(tt_points[index,4]))
-	ftest.write("Width={:2f}; ".format(tt_points[index,5]))
-	ftest.write("Rec.pos={:8.4f}; ".format(tt_points[index,6]))
-	if tt_points[index,7] == 0: # vertical scifi plane gives X coordinate
-		ftest.write("X={:8.4f}; ".format(tt_raw[index,5]))
-		ftest.write('d={}'.format(tt_raw[index,5] - tt_points[index,6]))
-	elif tt_points[index,7] == 1: # horisontal scifi plane gives Y coordinate
-		ftest.write("Y={:8.4f}; ".format(tt_raw[index,6]))
-		ftest.write('d={}'.format(tt_raw[index,6] - tt_points[index,6]))
-	ftest.write("\n")
-ftest.close()
-
-
-with open("$PWD/TToutput.txt","w") as ttout:
+with open("TToutput.txt","w") as ttout:
 	ttout.write("TT station; Detector ID; Position [channel];" 
 					"Amplitude [ph.e.]; Cluster Width; Coordinate [cm]; X or Y \n")
 	for index, event in enumerate(tt_points):
@@ -514,33 +477,49 @@ plt.subplot(2, 2, 1)
 axs = plt.gca()
 ly_bins = np.linspace(4.5,100,200)
 plt.hist(tt_points[:,4], bins=ly_bins, label="Light yield")
-axs.set_xlabel("LY, ph.e.")
+axs.set_xlabel("LY, [ph.e.]")
 axs.set_ylabel("Events")
 plt.legend(loc="upper right")
 
 plt.subplot(2, 2, 2) 
-axs = plt.gca()
-width_bins = np.linspace(1,11,11)
-plt.hist(tt_points[:,5], bins=width_bins, label="Cluster Width")
-axs.set_xlabel("Cluster Width")
-axs.set_ylabel("Events")
-plt.legend(loc="upper right")
-
-plt.subplot(2, 2, 3) 
-axs = plt.gca()
-delta_bins = 100
-plt.hist(tt_points[:,8], bins=delta_bins, label="delta coordinate")
-axs.set_xlabel("Defferences, cm")
-axs.set_ylabel("Events")
-plt.legend(loc="upper right")
-
-plt.subplot(2, 2, 4) 
 axs = plt.gca()
 nbins = 24
 plt.hist(tt_points[:,1], bins=nbins, label="TT station")
 axs.set_xlabel("Station number")
 axs.set_ylabel("Events")
 plt.legend(loc="upper right")
+
+# Print 'X-Z' and 'Y-Z' as output data.
+# 'X-Y-Z' graphics need additional analysis (linking by time).
+xz_points = []
+yz_points = []
+for index, event in enumerate(tt_points):
+	if tt_points[index, 7] == 0: # vertical
+		xz_points.append([
+			tt_raw[index, 7], # Z
+			tt_points[index, 6]
+		])
+	elif tt_points[index, 7] == 1: # horizontal
+		yz_points.append([
+			tt_raw[index, 7], # Z
+			tt_points[index, 6]
+		])
+xz_points = np.array(xz_points)
+yz_points = np.array(yz_points)
+
+plt.subplot(2, 2, 3) 
+axs = plt.gca()
+axs.scatter(xz_points[:,0], xz_points[:, 1])
+axs.set_xlabel("Z, [cm]")
+axs.set_ylabel("X, [cm]")
+axs.set_ylim(-50, +50) # +-73.2475
+
+plt.subplot(2, 2, 4)
+axs = plt.gca()
+axs.scatter(yz_points[:,0], yz_points[:, 1])
+axs.set_xlabel("Z, [cm]")
+axs.set_ylabel("Y, [cm]")
+axs.set_ylim(-80, +80) # +-47.1575
 
 plt.show()
 # ----------------------------------------------
